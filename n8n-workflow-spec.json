@@ -1,0 +1,235 @@
+{
+  "name": "KanjiFlow Video Generation Workflow",
+  "description": "Generate 20-second kanji learning videos with background images, stroke animations, and audio",
+  "nodes": [
+    {
+      "id": "webhook",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "description": "Receive kanji list from frontend",
+      "parameters": {
+        "path": "kanji-video-generate",
+        "method": "POST"
+      }
+    },
+    {
+      "id": "supabase-fetch",
+      "name": "Fetch Kanji Data",
+      "type": "n8n-nodes-base.supabase",
+      "description": "Get full kanji details from database",
+      "parameters": {
+        "operation": "select",
+        "table": "kanji_library",
+        "filter": "kanji.in.({{$json.kanjiList}})"
+      }
+    },
+    {
+      "id": "loop-start",
+      "name": "Loop Each Kanji",
+      "type": "n8n-nodes-base.splitInBatches",
+      "description": "Process each kanji individually"
+    },
+    {
+      "id": "replicate-background",
+      "name": "Generate Background Image",
+      "type": "n8n-nodes-base.httpRequest",
+      "description": "Call Replicate API for Stable Diffusion",
+      "parameters": {
+        "url": "https://api.replicate.com/v1/predictions",
+        "method": "POST",
+        "authentication": "headerAuth",
+        "body": {
+          "version": "stability-ai/sdxl",
+          "input": {
+            "prompt": "Japanese calligraphy background, traditional washi paper texture, subtle beige and cream colors, minimalist zen aesthetic, soft lighting, 1080x1920 vertical format, elegant and serene atmosphere",
+            "width": 1080,
+            "height": 1920
+          }
+        }
+      }
+    },
+    {
+      "id": "wait-background",
+      "name": "Wait for Background Generation",
+      "type": "n8n-nodes-base.wait",
+      "description": "Poll until image is ready"
+    },
+    {
+      "id": "loop-strokes",
+      "name": "Generate Stroke Sequence",
+      "type": "n8n-nodes-base.splitInBatches",
+      "description": "Generate one image per stroke",
+      "parameters": {
+        "batchSize": 1,
+        "options": {
+          "reset": false
+        }
+      }
+    },
+    {
+      "id": "replicate-stroke",
+      "name": "Generate Stroke Image",
+      "type": "n8n-nodes-base.httpRequest",
+      "description": "Generate progressive stroke images",
+      "parameters": {
+        "url": "https://api.replicate.com/v1/predictions",
+        "method": "POST",
+        "body": {
+          "version": "stability-ai/sdxl",
+          "input": {
+            "prompt": "Japanese kanji {{$json.kanji}} written in traditional calligraphy brush style, black ink on washi paper, stroke {{$json.strokeNumber}} of {{$json.totalStrokes}}, progressive writing sequence",
+            "image": "{{$node['Generate Background Image'].json.output[0]}}",
+            "width": 1080,
+            "height": 1920
+          }
+        }
+      }
+    },
+    {
+      "id": "upload-images",
+      "name": "Upload to Supabase Storage",
+      "type": "n8n-nodes-base.supabase",
+      "description": "Store all generated images",
+      "parameters": {
+        "operation": "upload",
+        "bucket": "kanji-images",
+        "fileName": "{{$json.kanji}}/stroke_{{$json.strokeNumber}}.png"
+      }
+    },
+    {
+      "id": "ffmpeg-compose",
+      "name": "Compose Video with FFmpeg",
+      "type": "n8n-nodes-base.code",
+      "description": "Use FFmpeg to create 20-second video",
+      "parameters": {
+        "language": "javascript",
+        "code": "// FFmpeg command to compose video\nconst { exec } = require('child_process');\nconst util = require('util');\nconst execPromise = util.promisify(exec);\n\nconst kanji = $input.all()[0].json.kanji;\nconst strokeImages = $input.all().map(item => item.json.imageUrl);\nconst totalStrokes = strokeImages.length;\nconst strokeDuration = 10.0 / totalStrokes;\n\n// Create FFmpeg filter complex for timeline\nconst filterComplex = `\n  [0:v]scale=1080:1920,setpts=PTS-STARTPTS,trim=0:1[opening];\n  [1:v]scale=1080:1920,setpts=PTS-STARTPTS,trim=0:3[category];\n  ${strokeImages.map((img, i) => \n    `[${i+2}:v]scale=1080:1920,setpts=PTS-STARTPTS,trim=0:${strokeDuration}[stroke${i}];`\n  ).join('')}\n  [${strokeImages.length+2}:v]scale=1080:1920,setpts=PTS-STARTPTS,trim=0:3[usage];\n  [${strokeImages.length+3}:v]scale=1080:1920,setpts=PTS-STARTPTS,trim=0:3[conclusion];\n  [opening][category]${strokeImages.map((_, i) => `[stroke${i}]`).join('')}[usage][conclusion]concat=n=${strokeImages.length+5}:v=1:a=0[outv]\n`;\n\nconst ffmpegCmd = `ffmpeg \\\n  -loop 1 -t 1 -i opening.png \\\n  -loop 1 -t 3 -i category.png \\\n  ${strokeImages.map(img => `-loop 1 -t ${strokeDuration} -i ${img}`).join(' ')} \\\n  -loop 1 -t 3 -i usage.png \\\n  -loop 1 -t 3 -i conclusion.png \\\n  -i LoFi_Japanese_Chill.mp3 \\\n  -filter_complex \"${filterComplex}\" \\\n  -map \"[outv]\" -map ${strokeImages.length+4}:a \\\n  -c:v libx264 -preset medium -crf 23 \\\n  -c:a aac -b:a 128k \\\n  -t 20 \\\n  -y output_${kanji}.mp4`;\n\nconst { stdout, stderr } = await execPromise(ffmpegCmd);\n\nreturn [{ json: { kanji, videoPath: `output_${kanji}.mp4`, ffmpegOutput: stdout } }];"
+      }
+    },
+    {
+      "id": "upload-video",
+      "name": "Upload Video to Storage",
+      "type": "n8n-nodes-base.supabase",
+      "description": "Upload final MP4 to Supabase Storage",
+      "parameters": {
+        "operation": "upload",
+        "bucket": "kanji-videos",
+        "fileName": "KanjiFlow_{{$json.kanji}}_{{$now.format('YYYYMMDD')}}.mp4"
+      }
+    },
+    {
+      "id": "update-queue",
+      "name": "Update Queue Status",
+      "type": "n8n-nodes-base.supabase",
+      "description": "Mark video as completed",
+      "parameters": {
+        "operation": "update",
+        "table": "video_generation_queue",
+        "updateFields": {
+          "status": "completed",
+          "video_url": "{{$json.publicUrl}}",
+          "completed_at": "{{$now.toISOString()}}"
+        },
+        "filter": "kanji.eq.{{$json.kanji}}"
+      }
+    },
+    {
+      "id": "create-zip",
+      "name": "Create ZIP Archive",
+      "type": "n8n-nodes-base.code",
+      "description": "Combine all videos into single ZIP",
+      "parameters": {
+        "language": "javascript",
+        "code": "const JSZip = require('jszip');\nconst fs = require('fs').promises;\nconst zip = new JSZip();\n\nfor (const item of $input.all()) {\n  const videoBuffer = await fs.readFile(item.json.videoPath);\n  zip.file(`KanjiFlow_${item.json.kanji}.mp4`, videoBuffer);\n}\n\nconst zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });\nconst zipFilename = `KanjiFlow_Weekly_Download_${new Date().toISOString().split('T')[0].replace(/-/g, '')}.zip`;\nawait fs.writeFile(`/tmp/${zipFilename}`, zipBuffer);\n\nreturn [{ json: { zipFilename, zipPath: `/tmp/${zipFilename}` } }];"
+      }
+    },
+    {
+      "id": "upload-zip",
+      "name": "Upload ZIP to Storage",
+      "type": "n8n-nodes-base.supabase",
+      "description": "Upload final ZIP archive",
+      "parameters": {
+        "operation": "upload",
+        "bucket": "kanji-videos",
+        "fileName": "{{$json.zipFilename}}"
+      }
+    },
+    {
+      "id": "cleanup",
+      "name": "Cleanup Temp Files",
+      "type": "n8n-nodes-base.code",
+      "description": "Remove temporary files",
+      "parameters": {
+        "language": "javascript",
+        "code": "const fs = require('fs').promises;\nconst { exec } = require('child_process');\nconst util = require('util');\nconst execPromise = util.promisify(exec);\n\nawait execPromise('rm -rf /tmp/kanji-*');\nawait execPromise('rm -f output_*.mp4');\n\nreturn [{ json: { cleanup: 'completed' } }];"
+      }
+    },
+    {
+      "id": "respond",
+      "name": "Send Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "description": "Return download URL to frontend",
+      "parameters": {
+        "responseBody": {
+          "success": true,
+          "message": "Videos generated successfully",
+          "downloadUrl": "{{$node['Upload ZIP to Storage'].json.publicUrl}}"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "webhook": ["supabase-fetch"],
+    "supabase-fetch": ["loop-start"],
+    "loop-start": ["replicate-background"],
+    "replicate-background": ["wait-background"],
+    "wait-background": ["loop-strokes"],
+    "loop-strokes": ["replicate-stroke"],
+    "replicate-stroke": ["upload-images"],
+    "upload-images": ["loop-strokes"],
+    "loop-strokes": ["ffmpeg-compose"],
+    "ffmpeg-compose": ["upload-video"],
+    "upload-video": ["update-queue"],
+    "update-queue": ["loop-start"],
+    "loop-start": ["create-zip"],
+    "create-zip": ["upload-zip"],
+    "upload-zip": ["cleanup"],
+    "cleanup": ["respond"]
+  },
+  "settings": {
+    "timezone": "Asia/Tokyo",
+    "saveExecutionProgress": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "requirements": {
+    "n8n_version": "1.0.0+",
+    "nodes": [
+      "n8n-nodes-base.webhook",
+      "n8n-nodes-base.supabase",
+      "n8n-nodes-base.httpRequest",
+      "n8n-nodes-base.code",
+      "n8n-nodes-base.splitInBatches",
+      "n8n-nodes-base.wait"
+    ],
+    "external_services": [
+      "Replicate API (Stable Diffusion)",
+      "Supabase (Database + Storage)",
+      "FFmpeg (installed on n8n server)"
+    ],
+    "environment_variables": {
+      "REPLICATE_API_TOKEN": "Your Replicate API token",
+      "SUPABASE_URL": "Your Supabase project URL",
+      "SUPABASE_SERVICE_KEY": "Your Supabase service role key"
+    }
+  },
+  "notes": [
+    "This workflow processes 7 kanji characters in sequence",
+    "Each kanji takes approximately 2-5 minutes to generate (depending on stroke count)",
+    "Total workflow execution time: 15-35 minutes for 7 videos",
+    "Requires FFmpeg installed on n8n server with proper codecs",
+    "Audio files (LoFi_Japanese_Chill.mp3, brush_strike.wav) must be pre-uploaded to n8n server",
+    "Recommended: Run n8n in Docker with FFmpeg pre-installed",
+    "Alternative image generation: Can use OpenAI DALL-E instead of Replicate"
+  ]
+}

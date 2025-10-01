@@ -1,0 +1,192 @@
+{
+  "name": "KanjiFlow Free Video Generator",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "kanji-video-generate",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-node",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "kanji-video-generate"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Extract kanji list from webhook\nconst kanjiList = $input.first().json.kanjiList;\n\nif (!kanjiList || !Array.isArray(kanjiList) || kanjiList.length === 0) {\n  throw new Error('kanjiList is required and must be a non-empty array');\n}\n\nconsole.log(`Processing ${kanjiList.length} kanji characters`);\n\nreturn kanjiList.map((k, index) => ({\n  json: {\n    kanji: k.kanji,\n    meaning: k.meaning,\n    category: k.category,\n    difficulty: k.difficulty || 'N5',\n    totalStrokes: k.totalStrokes || 4,\n    usageExample: k.usageExample || { word: '', reading: '', translation: '' },\n    index: index + 1,\n    total: kanjiList.length\n  }\n}));"
+      },
+      "id": "prepare-data-node",
+      "name": "Prepare Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "const { exec } = require('child_process');\nconst util = require('util');\nconst execPromise = util.promisify(exec);\n\nconst kanji = $json.kanji;\nconst meaning = $json.meaning;\nconst category = $json.category;\nconst difficulty = $json.difficulty;\nconst usageExample = $json.usageExample;\n\n// Create temp directory\nconst timestamp = Date.now();\nconst tmpDir = `/tmp/kanji_${kanji}_${timestamp}`;\nawait execPromise(`mkdir -p ${tmpDir}`);\n\nconsole.log(`Generating images for ${kanji} in ${tmpDir}`);\n\ntry {\n  // 1. Background image (beige paper texture)\n  const bgPath = `${tmpDir}/background.jpg`;\n  await execPromise(`\n    convert -size 1080x1920 \\\n      plasma:fractal \\\n      -colorspace Gray \\\n      -brightness-contrast 20x-10 \\\n      -blur 0x2 \\\n      -fill '#F5F5DC' -colorize 100% \\\n      ${bgPath}\n  `);\n  console.log('Background image created');\n\n  // 2. Opening scene (black background)\n  const openingPath = `${tmpDir}/opening.jpg`;\n  await execPromise(`\n    convert -size 1080x1920 xc:black \\\n      -gravity center \\\n      -pointsize 80 -fill white \\\n      -annotate +0-100 \"Today's Kanji\" \\\n      -pointsize 60 -fill white \\\n      -annotate +0+100 \"Can you write this?\" \\\n      ${openingPath}\n  `);\n  console.log('Opening image created');\n\n  // 3. Category scene\n  const categoryPath = `${tmpDir}/category.jpg`;\n  await execPromise(`\n    convert -size 1080x1920 xc:black \\\n      -gravity center \\\n      -pointsize 70 -fill white \\\n      -annotate +0-100 \"Why this Kanji?\" \\\n      -pointsize 90 -fill '#FFD700' \\\n      -annotate +0+100 \"Category: ${category}\" \\\n      ${categoryPath}\n  `);\n  console.log('Category image created');\n\n  // 4. Main kanji scene (with background)\n  const strokesPath = `${tmpDir}/strokes.jpg`;\n  await execPromise(`\n    convert ${bgPath} \\\n      -gravity center \\\n      -pointsize 600 -fill black \\\n      -annotate +0-200 \"${kanji}\" \\\n      -pointsize 100 -fill '#333333' \\\n      -annotate +0+600 \"${meaning}\" \\\n      ${strokesPath}\n  `);\n  console.log('Kanji image created');\n\n  // 5. Usage example scene\n  const usagePath = `${tmpDir}/usage.jpg`;\n  const usageWord = usageExample.word || '例なし';\n  const usageReading = usageExample.reading || '';\n  const usageTranslation = usageExample.translation || '';\n  \n  await execPromise(`\n    convert -size 1080x1920 xc:black \\\n      -gravity center \\\n      -pointsize 70 -fill white \\\n      -annotate +0-300 \"How to use it?\" \\\n      -pointsize 120 -fill '#FFD700' \\\n      -annotate +0-100 \"${usageWord}\" \\\n      -pointsize 60 -fill white \\\n      -annotate +0+50 \"${usageReading}\" \\\n      -pointsize 50 -fill '#CCCCCC' \\\n      -annotate +0+150 \"${usageTranslation}\" \\\n      ${usagePath}\n  `);\n  console.log('Usage image created');\n\n  // 6. Conclusion scene\n  const conclusionPath = `${tmpDir}/conclusion.jpg`;\n  await execPromise(`\n    convert -size 1080x1920 xc:black \\\n      -gravity center \\\n      -pointsize 400 -fill white \\\n      -annotate +0-200 \"${kanji}\" \\\n      -pointsize 80 -fill white \\\n      -annotate +0+200 \"= ${meaning}\" \\\n      -pointsize 60 -fill '#FFD700' \\\n      -annotate +0+350 \"Level: ${difficulty}\" \\\n      ${conclusionPath}\n  `);\n  console.log('Conclusion image created');\n\n  return [{\n    json: {\n      kanji: kanji,\n      meaning: meaning,\n      tmpDir: tmpDir,\n      openingPath: openingPath,\n      categoryPath: categoryPath,\n      strokesPath: strokesPath,\n      usagePath: usagePath,\n      conclusionPath: conclusionPath,\n      timestamp: timestamp\n    }\n  }];\n} catch (error) {\n  console.error('ImageMagick error:', error);\n  // Clean up on error\n  await execPromise(`rm -rf ${tmpDir}`).catch(() => {});\n  throw new Error(`Image generation failed: ${error.message}`);\n}"
+      },
+      "id": "generate-images-node",
+      "name": "Generate Images",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "const { exec } = require('child_process');\nconst util = require('util');\nconst fs = require('fs').promises;\nconst execPromise = util.promisify(exec);\n\nconst kanji = $json.kanji;\nconst tmpDir = $json.tmpDir;\nconst timestamp = $json.timestamp;\nconst outputPath = `${tmpDir}/video_${kanji}.mp4`;\n\nconsole.log(`Generating video for ${kanji}`);\n\ntry {\n  // FFmpeg command to create 20-second video\n  const ffmpegCmd = `\n    ffmpeg \\\n      -loop 1 -t 1 -i ${$json.openingPath} \\\n      -loop 1 -t 3 -i ${$json.categoryPath} \\\n      -loop 1 -t 10 -i ${$json.strokesPath} \\\n      -loop 1 -t 3 -i ${$json.usagePath} \\\n      -loop 1 -t 3 -i ${$json.conclusionPath} \\\n      -i /home/node/.n8n/audio/LoFi_Japanese_Chill.mp3 \\\n      -filter_complex \" \\\n        [0:v]scale=1080:1920,setsar=1,fps=30[v0]; \\\n        [1:v]scale=1080:1920,setsar=1,fps=30[v1]; \\\n        [2:v]scale=1080:1920,setsar=1,fps=30[v2]; \\\n        [3:v]scale=1080:1920,setsar=1,fps=30[v3]; \\\n        [4:v]scale=1080:1920,setsar=1,fps=30[v4]; \\\n        [v0][v1][v2][v3][v4]concat=n=5:v=1:a=0[outv] \\\n      \" \\\n      -map \"[outv]\" -map 5:a \\\n      -c:v libx264 -preset fast -crf 23 \\\n      -c:a aac -b:a 128k \\\n      -t 20 \\\n      -pix_fmt yuv420p \\\n      -y ${outputPath}\n  `;\n\n  const { stdout, stderr } = await execPromise(ffmpegCmd, {\n    maxBuffer: 50 * 1024 * 1024\n  });\n\n  console.log('FFmpeg completed successfully');\n\n  // Read video file\n  const videoBuffer = await fs.readFile(outputPath);\n  const videoBase64 = videoBuffer.toString('base64');\n  const fileSize = videoBuffer.length;\n\n  console.log(`Video size: ${(fileSize / 1024 / 1024).toFixed(2)} MB`);\n\n  const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '');\n  const filename = `KanjiFlow_${kanji}_${dateStr}.mp4`;\n\n  return [{\n    json: {\n      kanji: kanji,\n      meaning: $json.meaning,\n      videoPath: outputPath,\n      videoBase64: videoBase64,\n      fileSize: fileSize,\n      filename: filename,\n      tmpDir: tmpDir\n    }\n  }];\n} catch (error) {\n  console.error('FFmpeg error:', error);\n  // Clean up on error\n  await execPromise(`rm -rf ${tmpDir}`).catch(() => {});\n  throw new Error(`Video generation failed: ${error.message}`);\n}"
+      },
+      "id": "generate-video-node",
+      "name": "Generate Video",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/storage/v1/object/kanji-videos/={{ $json.filename }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyContentType": "raw",
+        "rawBody": "={{ $json.videoBase64 }}",
+        "options": {
+          "bodyContentCustomMimeType": "video/mp4"
+        }
+      },
+      "id": "upload-video-node",
+      "name": "Upload to Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1050, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "supabase-auth",
+          "name": "Supabase Storage Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const { exec } = require('child_process');\nconst util = require('util');\nconst execPromise = util.promisify(exec);\n\nconst tmpDir = $json.tmpDir;\nconst kanji = $json.kanji;\n\nconsole.log(`Cleaning up temp files for ${kanji}`);\n\n// Delete temporary directory\ntry {\n  await execPromise(`rm -rf ${tmpDir}`);\n  console.log(`Cleaned up ${tmpDir}`);\n} catch (error) {\n  console.error('Cleanup error:', error);\n}\n\nconst videoUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/kanji-videos/${$json.filename}`;\n\nreturn [{\n  json: {\n    kanji: kanji,\n    meaning: $json.meaning,\n    filename: $json.filename,\n    videoUrl: videoUrl,\n    fileSize: $json.fileSize,\n    success: true\n  }\n}];"
+      },
+      "id": "cleanup-node",
+      "name": "Cleanup",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Aggregate all video results\nconst results = $input.all();\n\nconst videos = results.map(item => ({\n  kanji: item.json.kanji,\n  meaning: item.json.meaning,\n  filename: item.json.filename,\n  videoUrl: item.json.videoUrl,\n  fileSize: item.json.fileSize\n}));\n\nconst totalSize = videos.reduce((sum, v) => sum + v.fileSize, 0);\nconst totalSizeMB = (totalSize / 1024 / 1024).toFixed(2);\n\nconsole.log(`Generated ${videos.length} videos, total size: ${totalSizeMB} MB`);\n\nreturn [{\n  json: {\n    success: true,\n    message: `Successfully generated ${videos.length} kanji videos`,\n    videos: videos,\n    totalVideos: videos.length,\n    totalSizeMB: totalSizeMB,\n    downloadUrls: videos.map(v => v.videoUrl)\n  }\n}];"
+      },
+      "id": "aggregate-results-node",
+      "name": "Aggregate Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1450, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "respond-node",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1650, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Images",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Images": {
+      "main": [
+        [
+          {
+            "node": "Generate Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Video": {
+      "main": [
+        [
+          {
+            "node": "Upload to Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload to Supabase": {
+      "main": [
+        [
+          {
+            "node": "Cleanup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cleanup": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Results": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2024-10-01T00:00:00.000Z",
+  "versionId": "1"
+}
