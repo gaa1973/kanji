@@ -22,7 +22,7 @@ export function VideoPreview({ selectedKanji }: VideoPreviewProps) {
   const [loading, setLoading] = useState(false);
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [generating, setGenerating] = useState(false);
-  const [generationProgress, setGenerationProgress] = useState(0);
+  const [currentGeneratingIndex, setCurrentGeneratingIndex] = useState<number>(-1);
   const [generatedZips, setGeneratedZips] = useState<{ kanji: string; sceneCount: number }[]>([]);
   const [enableAudio, setEnableAudio] = useState(true);
 
@@ -67,56 +67,46 @@ export function VideoPreview({ selectedKanji }: VideoPreviewProps) {
     }
   };
 
-  const handleGenerate = async () => {
+  const handleGenerateSingle = async (index: number) => {
+    if (generatedZips.some(z => z.kanji === kanjiDetails[index].kanji)) {
+      alert('この動画は既に生成済みです');
+      return;
+    }
+
     setGenerating(true);
-    setGenerationProgress(0);
-    setGeneratedZips([]);
+    setCurrentGeneratingIndex(index);
 
     try {
-      const totalVideos = kanjiDetails.length;
-      console.log(`Starting generation of ${totalVideos} videos...`);
+      const kanji = kanjiDetails[index];
+      console.log(`Generating video for: ${kanji.kanji}`);
 
-      for (let i = 0; i < totalVideos; i++) {
-        const kanji = kanjiDetails[i];
-        console.log(`[${i + 1}/${totalVideos}] Generating video for: ${kanji.kanji}`);
-        setGenerationProgress(Math.round((i / totalVideos) * 90));
+      const videoData = {
+        kanji: kanji.kanji,
+        meaning: kanji.meaning || '',
+        category: kanji.category,
+        difficulty: kanji.difficulty || 'N5',
+        totalStrokes: kanji.total_strokes || 1,
+        usageExample: (Array.isArray(kanji.usage_examples) && kanji.usage_examples[0]) ||
+          { word: kanji.kanji, reading: '', translation: '' },
+      };
 
-        const videoData = {
-          kanji: kanji.kanji,
-          meaning: kanji.meaning || '',
-          category: kanji.category,
-          difficulty: kanji.difficulty || 'N5',
-          totalStrokes: kanji.total_strokes || 1,
-          usageExample: (Array.isArray(kanji.usage_examples) && kanji.usage_examples[0]) ||
-            { word: kanji.kanji, reading: '', translation: '' },
-        };
+      console.log('Generating video blob...');
+      const videoBlob = await generateKanjiVideo(videoData, enableAudio);
+      console.log(`Video blob size: ${(videoBlob.size / 1024 / 1024).toFixed(2)} MB`);
 
-        console.log(`[${i + 1}/${totalVideos}] Generating video blob...`);
-        const videoBlob = await generateKanjiVideo(videoData, enableAudio);
-        console.log(`[${i + 1}/${totalVideos}] Video blob size: ${(videoBlob.size / 1024 / 1024).toFixed(2)} MB`);
+      const filename = `KanjiFlow_${kanji.kanji}_Day${index + 1}_${Date.now()}.webm`;
+      console.log(`Downloading as: ${filename}`);
+      await downloadVideo(videoBlob, filename);
+      console.log('Download complete');
 
-        const filename = `KanjiFlow_${kanji.kanji}_Day${i + 1}_${Date.now()}.webm`;
-        console.log(`[${i + 1}/${totalVideos}] Downloading as: ${filename}`);
-        await downloadVideo(videoBlob, filename);
-        console.log(`[${i + 1}/${totalVideos}] Download complete`);
-
-        setGeneratedZips(prev => [...prev, { kanji: kanji.kanji, sceneCount: 5 }]);
-
-        if (window.gc) {
-          window.gc();
-        }
-
-        await new Promise(resolve => setTimeout(resolve, 2000));
-      }
-
-      setGenerationProgress(100);
-      console.log(`All ${totalVideos} videos generated successfully!`);
-      alert(`${totalVideos}個の動画生成が完了しました！`);
+      setGeneratedZips(prev => [...prev, { kanji: kanji.kanji, sceneCount: 5 }]);
+      alert(`${kanji.kanji}の動画生成が完了しました！`);
     } catch (error) {
-      console.error('Error generating videos:', error);
+      console.error('Error generating video:', error);
       alert('動画生成中にエラーが発生しました。もう一度お試しください。');
     } finally {
       setGenerating(false);
+      setCurrentGeneratingIndex(-1);
     }
   };
 
@@ -139,41 +129,23 @@ export function VideoPreview({ selectedKanji }: VideoPreviewProps) {
           Video Preview ({kanjiDetails.length}/7)
         </h3>
         <div className="flex items-center gap-4">
-{selectedKanji.length === 7 && !generating && generatedZips.length === 0 && (
-            <>
-              <label className="flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-lg cursor-pointer hover:bg-gray-200 transition-colors">
-                <input
-                  type="checkbox"
-                  checked={enableAudio}
-                  onChange={(e) => setEnableAudio(e.target.checked)}
-                  className="w-4 h-4"
-                />
-                <span className="text-sm font-medium text-gray-700">効果音を追加</span>
-              </label>
-              <button
-                onClick={handleGenerate}
-                className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all shadow-md hover:shadow-lg text-lg font-semibold"
-              >
-                <Download size={24} />
-                動画を生成・ダウンロード
-              </button>
-            </>
+          <label className="flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-lg cursor-pointer hover:bg-gray-200 transition-colors">
+            <input
+              type="checkbox"
+              checked={enableAudio}
+              onChange={(e) => setEnableAudio(e.target.checked)}
+              className="w-4 h-4"
+              disabled={generating}
+            />
+            <span className="text-sm font-medium text-gray-700">効果音を追加</span>
+          </label>
+          {generatedZips.length > 0 && (
+            <div className="flex items-center gap-2 px-4 py-2 bg-green-50 border border-green-500 rounded-lg text-green-700">
+              <CheckCircle size={20} />
+              <span className="font-semibold">{generatedZips.length}/7 完了</span>
+            </div>
           )}
         </div>
-{generating && (
-          <div className="flex items-center gap-3 px-6 py-3 bg-blue-50 border-2 border-blue-300 rounded-lg">
-            <Loader2 className="animate-spin text-blue-600" size={24} />
-            <span className="text-blue-800 font-semibold">
-              生成中... {Math.round(generationProgress)}%
-            </span>
-          </div>
-        )}
-{generatedZips.length > 0 && (
-          <div className="flex items-center gap-2 px-6 py-3 bg-green-50 border-2 border-green-500 rounded-lg text-green-700">
-            <CheckCircle size={24} />
-            <span className="font-semibold">{generatedZips.length}個のZIPをダウンロード済み</span>
-          </div>
-        )}
       </div>
 
       {selectedKanji.length < 7 && (
@@ -184,40 +156,13 @@ export function VideoPreview({ selectedKanji }: VideoPreviewProps) {
         </div>
       )}
 
-{generatedZips.length > 0 && (
-        <div className="bg-gradient-to-r from-green-50 to-blue-50 border-2 border-green-200 rounded-lg p-6">
-          <div className="space-y-4">
-            <div className="flex items-start gap-3">
-              <CheckCircle className="text-green-600 flex-shrink-0 mt-1" size={24} />
-              <div className="flex-1">
-                <h4 className="text-lg font-semibold text-gray-800 mb-2">
-                  動画生成リクエストが完了しました！
-                </h4>
-                <p className="text-sm text-gray-600 mb-4">
-                  {generatedZips.length}個の漢字動画が処理キューに追加されました。
-                </p>
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                  <p className="text-sm text-blue-800 font-semibold mb-2">生成方式:</p>
-                  <ul className="text-xs text-blue-700 space-y-1 list-disc list-inside">
-                    <li>ブラウザ上でCanvas APIを使用して生成</li>
-                    <li>外部APIや追加ツール不要</li>
-                    <li>完全無料・即時ダウンロード</li>
-                    <li>WebM形式（VP8/Opusコーデック）で出力</li>
-                    <li>効果音: {enableAudio ? '有効' : '無効'}</li>
-                  </ul>
-                </div>
-                <div className="grid grid-cols-3 md:grid-cols-7 gap-2">
-                  {generatedZips.map((zip, idx) => (
-                    <div
-                      key={idx}
-                      className="bg-white border-2 border-green-300 rounded-lg p-2 text-center"
-                    >
-                      <div className="text-2xl mb-1">{zip.kanji}</div>
-                      <div className="text-xs text-gray-600">完了</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+      {selectedKanji.length === 7 && generatedZips.length === 7 && (
+        <div className="bg-gradient-to-r from-green-50 to-blue-50 border-2 border-green-500 rounded-lg p-6">
+          <div className="flex items-center gap-3">
+            <CheckCircle className="text-green-600" size={32} />
+            <div>
+              <h4 className="text-xl font-bold text-gray-800">全ての動画生成が完了しました！</h4>
+              <p className="text-sm text-gray-600 mt-1">7本の漢字学習動画をダウンロードしました</p>
             </div>
           </div>
         </div>
@@ -242,13 +187,39 @@ export function VideoPreview({ selectedKanji }: VideoPreviewProps) {
                     </p>
                   </div>
                 </div>
-                <button
-                  onClick={() => setExpandedIndex(expandedIndex === index ? null : index)}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-                >
-                  <Play size={16} />
-                  {expandedIndex === index ? '閉じる' : 'プレビュー'}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setExpandedIndex(expandedIndex === index ? null : index)}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                  >
+                    <Play size={16} />
+                    {expandedIndex === index ? '閉じる' : 'プレビュー'}
+                  </button>
+                  {generatedZips.some(z => z.kanji === kanji.kanji) ? (
+                    <div className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg">
+                      <CheckCircle size={16} />
+                      完了
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => handleGenerateSingle(index)}
+                      disabled={generating}
+                      className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg hover:from-purple-600 hover:to-pink-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {currentGeneratingIndex === index ? (
+                        <>
+                          <Loader2 className="animate-spin" size={16} />
+                          生成中
+                        </>
+                      ) : (
+                        <>
+                          <Download size={16} />
+                          生成
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
