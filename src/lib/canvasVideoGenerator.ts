@@ -19,6 +19,8 @@ export async function generateKanjiVideo(data: KanjiVideoData, withAudio: boolea
   canvas.height = 1920;
   const ctx = canvas.getContext('2d')!;
 
+  const quizOptions = generateQuizOptions(data.meaning);
+
   const fps = 30;
   const sceneDurations = [
     { name: 'hook', duration: 2, frames: fps * 2 },
@@ -64,7 +66,7 @@ export async function generateKanjiVideo(data: KanjiVideoData, withAudio: boolea
           drawHookScene(ctx, canvas, data.kanji, progress);
           break;
         case 'quiz':
-          drawQuizScene(ctx, canvas, data.kanji, data.meaning, progress);
+          drawQuizScene(ctx, canvas, data.kanji, quizOptions, progress);
           break;
         case 'reveal':
           drawRevealScene(ctx, canvas, data.kanji, data.meaning, progress);
@@ -136,7 +138,7 @@ function drawHookScene(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement,
   ctx.globalAlpha = 1;
 }
 
-function drawQuizScene(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, kanji: string, correctMeaning: string, progress: number) {
+function drawQuizScene(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, kanji: string, options: string[], progress: number) {
   ctx.fillStyle = '#0f3460';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -145,7 +147,6 @@ function drawQuizScene(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement,
   ctx.textAlign = 'center';
   ctx.fillText(kanji, canvas.width / 2, 500);
 
-  const options = generateQuizOptions(correctMeaning);
   const colors = ['#e94560', '#16213e', '#533483'];
   const letters = ['A', 'B', 'C'];
 
