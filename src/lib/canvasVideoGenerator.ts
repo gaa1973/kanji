@@ -21,11 +21,11 @@ export async function generateKanjiVideo(data: KanjiVideoData, withAudio: boolea
 
   const fps = 30;
   const sceneDurations = [
-    { name: 'opening', duration: 1, frames: fps * 1 },
-    { name: 'category', duration: 3, frames: fps * 3 },
-    { name: 'strokes', duration: 10, frames: fps * 10 },
-    { name: 'usage', duration: 3, frames: fps * 3 },
-    { name: 'conclusion', duration: 3, frames: fps * 3 }
+    { name: 'hook', duration: 2, frames: fps * 2 },
+    { name: 'quiz', duration: 4, frames: fps * 4 },
+    { name: 'reveal', duration: 5, frames: fps * 5 },
+    { name: 'meaning', duration: 5, frames: fps * 5 },
+    { name: 'trivia', duration: 4, frames: fps * 4 }
   ];
 
   const stream = canvas.captureStream(fps);
@@ -60,20 +60,20 @@ export async function generateKanjiVideo(data: KanjiVideoData, withAudio: boolea
       const progress = i / scene.frames;
 
       switch (scene.name) {
-        case 'opening':
-          drawOpeningScene(ctx, canvas, progress);
+        case 'hook':
+          drawHookScene(ctx, canvas, data.kanji, progress);
           break;
-        case 'category':
-          drawCategoryScene(ctx, canvas, data.category, progress);
+        case 'quiz':
+          drawQuizScene(ctx, canvas, data.kanji, data.meaning, progress);
           break;
-        case 'strokes':
-          drawStrokesScene(ctx, canvas, data.kanji, data.totalStrokes, progress);
+        case 'reveal':
+          drawRevealScene(ctx, canvas, data.kanji, data.meaning, progress);
           break;
-        case 'usage':
-          drawUsageScene(ctx, canvas, data.usageExample, progress);
+        case 'meaning':
+          drawMeaningScene(ctx, canvas, data.kanji, data.meaning, data.usageExample, progress);
           break;
-        case 'conclusion':
-          drawConclusionScene(ctx, canvas, data.kanji, data.meaning, data.difficulty, progress);
+        case 'trivia':
+          drawTriviaScene(ctx, canvas, data.category, data.difficulty, progress);
           break;
       }
 
@@ -103,48 +103,132 @@ export async function generateKanjiVideo(data: KanjiVideoData, withAudio: boolea
   }
 }
 
-function drawOpeningScene(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, progress: number) {
-  ctx.fillStyle = '#000000';
+function drawHookScene(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, kanji: string, progress: number) {
+  const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  gradient.addColorStop(0, '#1a1a2e');
+  gradient.addColorStop(1, '#16213e');
+  ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+  const scale = 0.5 + progress * 0.5;
   const opacity = Math.min(progress * 2, 1);
+
   ctx.globalAlpha = opacity;
-
   ctx.fillStyle = '#FFFFFF';
-  ctx.font = 'bold 80px sans-serif';
+  ctx.font = 'bold 70px sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText("Today's Kanji", canvas.width / 2, canvas.height / 2 - 50);
-
-  ctx.font = '60px sans-serif';
-  ctx.fillText("Can you write this?", canvas.width / 2, canvas.height / 2 + 80);
-
-  ctx.globalAlpha = 1;
-}
-
-function drawCategoryScene(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, category: string, progress: number) {
-  ctx.fillStyle = '#000000';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  const scale = 0.8 + (Math.sin(progress * Math.PI) * 0.2);
+  ctx.fillText('Can you read this?', canvas.width / 2, canvas.height / 2 - 300);
 
   ctx.save();
   ctx.translate(canvas.width / 2, canvas.height / 2);
   ctx.scale(scale, scale);
-  ctx.translate(-canvas.width / 2, -canvas.height / 2);
-
-  ctx.fillStyle = '#FFFFFF';
-  ctx.font = 'bold 70px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText("Why this Kanji?", canvas.width / 2, canvas.height / 2 - 100);
-
   ctx.fillStyle = '#FFD700';
-  ctx.font = 'bold 90px sans-serif';
-  ctx.fillText(`Category: ${category.toUpperCase()}`, canvas.width / 2, canvas.height / 2 + 100);
-
+  ctx.font = 'bold 600px serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(kanji, 0, 0);
   ctx.restore();
+
+  ctx.fillStyle = '#FF6B6B';
+  ctx.font = 'bold 60px sans-serif';
+  ctx.fillText('🤔', canvas.width / 2, canvas.height / 2 + 400);
+
+  ctx.globalAlpha = 1;
 }
 
-function drawStrokesScene(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, kanji: string, totalStrokes: number, progress: number) {
+function drawQuizScene(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, kanji: string, correctMeaning: string, progress: number) {
+  ctx.fillStyle = '#0f3460';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = '#FFFFFF';
+  ctx.font = 'bold 400px serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(kanji, canvas.width / 2, 500);
+
+  const options = generateQuizOptions(correctMeaning);
+  const colors = ['#e94560', '#16213e', '#533483'];
+  const letters = ['A', 'B', 'C'];
+
+  const slideIn = Math.min(progress * 2, 1);
+  const offset = (1 - slideIn) * 300;
+
+  for (let i = 0; i < 3; i++) {
+    const y = 900 + i * 280;
+    const boxOffset = i * 50;
+
+    ctx.fillStyle = colors[i];
+    ctx.fillRect(100, y - 80 + offset + boxOffset, 880, 200);
+
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = 'bold 80px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(letters[i], 150, y + 40 + offset + boxOffset);
+
+    ctx.font = '60px sans-serif';
+    ctx.fillText(options[i], 280, y + 40 + offset + boxOffset);
+  }
+
+  ctx.fillStyle = '#FFD700';
+  ctx.font = 'bold 50px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('Think fast! ⏱️', canvas.width / 2, 750);
+}
+
+function generateQuizOptions(correctMeaning: string): string[] {
+  const wrongOptions = [
+    'Love', 'Dream', 'Heart', 'Hope', 'Peace', 'Joy', 'Light', 'Star',
+    'Moon', 'Sun', 'Rain', 'Wind', 'Fire', 'Water', 'Tree', 'Flower',
+    'Bird', 'Fish', 'Mountain', 'River', 'Sky', 'Cloud', 'Thunder', 'Snow'
+  ].filter(opt => opt.toLowerCase() !== correctMeaning.toLowerCase());
+
+  const shuffled = wrongOptions.sort(() => Math.random() - 0.5);
+  const options = [correctMeaning, shuffled[0], shuffled[1]];
+  return options.sort(() => Math.random() - 0.5);
+}
+
+function drawRevealScene(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, kanji: string, meaning: string, progress: number) {
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  if (progress < 0.3) {
+    const circleProgress = progress / 0.3;
+    ctx.fillStyle = '#4CAF50';
+    ctx.beginPath();
+    ctx.arc(canvas.width / 2, canvas.height / 2, 150 * circleProgress, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = 'bold 120px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.globalAlpha = circleProgress;
+    ctx.fillText('✓', canvas.width / 2, canvas.height / 2);
+    ctx.globalAlpha = 1;
+  } else {
+    const scale = 1 + Math.sin((progress - 0.3) * Math.PI * 3) * 0.1;
+
+    ctx.save();
+    ctx.translate(canvas.width / 2, canvas.height / 2 - 200);
+    ctx.scale(scale, scale);
+    ctx.fillStyle = '#FFD700';
+    ctx.font = 'bold 450px serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(kanji, 0, 0);
+    ctx.restore();
+
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = 'bold 100px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('=', canvas.width / 2, canvas.height / 2 + 250);
+
+    ctx.fillStyle = '#4CAF50';
+    ctx.font = 'bold 120px sans-serif';
+    ctx.fillText(meaning.toUpperCase(), canvas.width / 2, canvas.height / 2 + 450);
+  }
+}
+
+function drawOldStrokesScene(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, kanji: string, totalStrokes: number, progress: number) {
   ctx.fillStyle = '#f5f5dc';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -340,52 +424,102 @@ function floodFill(data: Uint8ClampedArray, visited: Uint8Array, startX: number,
   return region;
 }
 
-function drawUsageScene(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, usageExample: { word: string; reading: string; translation: string }, progress: number) {
-  ctx.fillStyle = '#000000';
+function drawMeaningScene(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, kanji: string, meaning: string, usageExample: { word: string; reading: string; translation: string }, progress: number) {
+  const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  gradient.addColorStop(0, '#833ab4');
+  gradient.addColorStop(0.5, '#fd1d1d');
+  gradient.addColorStop(1, '#fcb045');
+  ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  const slideIn = Math.min(progress * 1.5, 1);
-  const offset = (1 - slideIn) * 200;
-
-  ctx.fillStyle = '#FFFFFF';
-  ctx.font = 'bold 70px sans-serif';
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+  ctx.font = 'bold 75px sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText("How to use it?", canvas.width / 2, canvas.height / 2 - 200 - offset);
+  ctx.fillText('Real Life Usage:', canvas.width / 2, 250);
 
-  ctx.font = 'bold 90px serif';
-  ctx.fillText(usageExample.word, canvas.width / 2, canvas.height / 2 - 50);
+  const bounce = 1 + Math.sin(progress * Math.PI * 6) * 0.03;
+  ctx.save();
+  ctx.translate(canvas.width / 2, 550);
+  ctx.scale(bounce, bounce);
+  ctx.fillStyle = '#FFFFFF';
+  ctx.font = 'bold 150px serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(usageExample.word, 0, 0);
+  ctx.restore();
 
-  ctx.font = '60px sans-serif';
-  ctx.fillText(usageExample.reading, canvas.width / 2, canvas.height / 2 + 80);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+  ctx.font = '70px sans-serif';
+  ctx.fillText(usageExample.reading, canvas.width / 2, 750);
 
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+  ctx.font = 'bold 65px sans-serif';
+  const translation = usageExample.translation;
+  if (translation.length > 30) {
+    const mid = translation.lastIndexOf(' ', translation.length / 2);
+    ctx.fillText(translation.substring(0, mid), canvas.width / 2, 950);
+    ctx.fillText(translation.substring(mid + 1), canvas.width / 2, 1050);
+  } else {
+    ctx.fillText(translation, canvas.width / 2, 1000);
+  }
+
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
   ctx.font = '55px sans-serif';
-  ctx.fillText(usageExample.translation, canvas.width / 2, canvas.height / 2 + 200 + offset);
+  ctx.fillText('💡', canvas.width / 2, 1300);
 }
 
-function drawConclusionScene(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, kanji: string, meaning: string, difficulty: string, progress: number) {
-  ctx.fillStyle = '#000000';
+function drawTriviaScene(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, category: string, difficulty: string, progress: number) {
+  ctx.fillStyle = '#0a0e27';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  const pulse = 1 + Math.sin(progress * Math.PI * 4) * 0.05;
+  for (let i = 0; i < 50; i++) {
+    const x = (Math.sin(i * 0.5 + progress * 5) * 0.5 + 0.5) * canvas.width;
+    const y = (Math.cos(i * 0.3 + progress * 3) * 0.5 + 0.5) * canvas.height;
+    const size = 3 + Math.sin(progress * 10 + i) * 2;
+    ctx.fillStyle = `rgba(255, 215, 0, ${0.3 + Math.sin(progress * 8 + i) * 0.3})`;
+    ctx.beginPath();
+    ctx.arc(x, y, size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const pulse = 1 + Math.sin(progress * Math.PI * 4) * 0.08;
 
   ctx.save();
-  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.translate(canvas.width / 2, 400);
   ctx.scale(pulse, pulse);
-  ctx.translate(-canvas.width / 2, -canvas.height / 2);
+  ctx.fillStyle = '#FFD700';
+  ctx.font = 'bold 70px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('✨ Fun Fact ✨', 0, 0);
+  ctx.restore();
 
   ctx.fillStyle = '#FFFFFF';
-  ctx.font = 'bold 120px serif';
+  ctx.font = 'bold 65px sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText(`${kanji} = ${meaning}`, canvas.width / 2, canvas.height / 2 - 150);
+  ctx.fillText('Category:', canvas.width / 2, 650);
 
-  ctx.font = 'bold 70px sans-serif';
-  ctx.fillText(`Level: ${difficulty}`, canvas.width / 2, canvas.height / 2 + 50);
+  ctx.fillStyle = '#4ECDC4';
+  ctx.font = 'bold 85px sans-serif';
+  ctx.fillText(category.toUpperCase(), canvas.width / 2, 800);
 
+  ctx.fillStyle = '#FFFFFF';
+  ctx.font = 'bold 65px sans-serif';
+  ctx.fillText('Difficulty:', canvas.width / 2, 1050);
+
+  const difficultyColor = difficulty.toLowerCase() === 'beginner' ? '#4CAF50' :
+                          difficulty.toLowerCase() === 'intermediate' ? '#FF9800' : '#F44336';
+  ctx.fillStyle = difficultyColor;
+  ctx.font = 'bold 85px sans-serif';
+  ctx.fillText(difficulty.toUpperCase(), canvas.width / 2, 1200);
+
+  ctx.fillStyle = '#FFD700';
+  ctx.font = 'bold 60px sans-serif';
+  ctx.fillText('👆 Follow for daily kanji!', canvas.width / 2, 1550);
+
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
   ctx.font = '50px sans-serif';
-  ctx.fillText("Share if you learned", canvas.width / 2, canvas.height / 2 + 200);
-  ctx.fillText("something new!", canvas.width / 2, canvas.height / 2 + 280);
-
-  ctx.restore();
+  ctx.fillText('Share if this helped! 🔄', canvas.width / 2, 1700);
 }
 
 
