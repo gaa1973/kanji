@@ -74,9 +74,11 @@ export function VideoPreview({ selectedKanji }: VideoPreviewProps) {
 
     try {
       const totalVideos = kanjiDetails.length;
+      console.log(`Starting generation of ${totalVideos} videos...`);
 
       for (let i = 0; i < totalVideos; i++) {
         const kanji = kanjiDetails[i];
+        console.log(`[${i + 1}/${totalVideos}] Generating video for: ${kanji.kanji}`);
         setGenerationProgress(Math.round((i / totalVideos) * 90));
 
         const videoData = {
@@ -89,14 +91,22 @@ export function VideoPreview({ selectedKanji }: VideoPreviewProps) {
             { word: kanji.kanji, reading: '', translation: '' },
         };
 
+        console.log(`[${i + 1}/${totalVideos}] Generating video blob...`);
         const videoBlob = await generateKanjiVideo(videoData, enableAudio);
-        const filename = `KanjiFlow_${kanji.kanji}_${Date.now()}.webm`;
+        console.log(`[${i + 1}/${totalVideos}] Video blob size: ${(videoBlob.size / 1024 / 1024).toFixed(2)} MB`);
+
+        const filename = `KanjiFlow_${kanji.kanji}_Day${i + 1}_${Date.now()}.webm`;
+        console.log(`[${i + 1}/${totalVideos}] Downloading as: ${filename}`);
         await downloadVideo(videoBlob, filename);
+        console.log(`[${i + 1}/${totalVideos}] Download complete`);
 
         setGeneratedZips(prev => [...prev, { kanji: kanji.kanji, sceneCount: 5 }]);
+
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
 
       setGenerationProgress(100);
+      console.log(`All ${totalVideos} videos generated successfully!`);
       alert(`${totalVideos}個の動画生成が完了しました！`);
     } catch (error) {
       console.error('Error generating videos:', error);
