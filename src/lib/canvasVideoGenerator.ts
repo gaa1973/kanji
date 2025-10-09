@@ -159,43 +159,185 @@ function drawStrokesScene(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasEleme
     );
   }
 
-  const currentStroke = Math.floor(progress * totalStrokes);
-  const strokeSegments = totalStrokes;
-  const segmentDuration = 1 / strokeSegments;
-  const currentSegmentProgress = (progress % segmentDuration) / segmentDuration;
+  const strokeDuration = 1 / totalStrokes;
+  const holdTime = 0.7;
+  const transitionTime = 0.3;
 
-  const isTransition = currentSegmentProgress < 0.1;
+  const currentStrokeIndex = Math.floor(progress * totalStrokes);
+  const progressInCurrentStroke = (progress * totalStrokes) - currentStrokeIndex;
 
-  if (!isTransition) {
-    const strokesToShow = currentStroke + 1;
-    const opacity = Math.min(strokesToShow / totalStrokes, 1);
+  let strokesToShow = currentStrokeIndex;
+  let opacity = 1.0;
 
-    ctx.globalAlpha = opacity;
-    ctx.fillStyle = '#000000';
-    ctx.font = 'bold 500px serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(kanji, canvas.width / 2, canvas.height / 2);
-    ctx.globalAlpha = 1;
+  if (progressInCurrentStroke < holdTime) {
+    strokesToShow = currentStrokeIndex;
+    opacity = 1.0;
   } else {
-    const fadeProgress = currentSegmentProgress / 0.1;
-    ctx.globalAlpha = fadeProgress;
-    const strokesToShow = currentStroke + 1;
-    const opacity = Math.min(strokesToShow / totalStrokes, 1);
+    const transitionProgress = (progressInCurrentStroke - holdTime) / transitionTime;
+    strokesToShow = currentStrokeIndex;
+    opacity = 1.0;
 
-    ctx.globalAlpha = opacity * fadeProgress;
+    const nextStrokeOpacity = transitionProgress;
+
+    ctx.save();
+    ctx.globalAlpha = 1.0;
     ctx.fillStyle = '#000000';
     ctx.font = 'bold 500px serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(kanji, canvas.width / 2, canvas.height / 2);
+
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = canvas.width;
+    tempCanvas.height = canvas.height;
+    const tempCtx = tempCanvas.getContext('2d')!;
+
+    tempCtx.font = 'bold 500px serif';
+    tempCtx.textAlign = 'center';
+    tempCtx.textBaseline = 'middle';
+    tempCtx.fillStyle = '#000000';
+    tempCtx.fillText(kanji, tempCanvas.width / 2, tempCanvas.height / 2);
+
+    const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+    const maskData = createStrokeMask(imageData, currentStrokeIndex, totalStrokes);
+    tempCtx.putImageData(maskData, 0, 0);
+
+    ctx.drawImage(tempCanvas, 0, 0);
+
+    if (nextStrokeOpacity > 0 && currentStrokeIndex + 1 < totalStrokes) {
+      const nextTempCanvas = document.createElement('canvas');
+      nextTempCanvas.width = canvas.width;
+      nextTempCanvas.height = canvas.height;
+      const nextTempCtx = nextTempCanvas.getContext('2d')!;
+
+      nextTempCtx.font = 'bold 500px serif';
+      nextTempCtx.textAlign = 'center';
+      nextTempCtx.textBaseline = 'middle';
+      nextTempCtx.fillStyle = '#000000';
+      nextTempCtx.fillText(kanji, nextTempCanvas.width / 2, nextTempCanvas.height / 2);
+
+      const nextImageData = nextTempCtx.getImageData(0, 0, nextTempCanvas.width, nextTempCanvas.height);
+      const nextMaskData = createStrokeMask(nextImageData, currentStrokeIndex + 1, totalStrokes);
+      nextTempCtx.clearRect(0, 0, nextTempCanvas.width, nextTempCanvas.height);
+      nextTempCtx.putImageData(nextMaskData, 0, 0);
+
+      ctx.globalAlpha = nextStrokeOpacity;
+      ctx.drawImage(nextTempCanvas, 0, 0);
+    }
+
+    ctx.restore();
+
+    const displayStroke = Math.min(currentStrokeIndex + 1, totalStrokes);
     ctx.globalAlpha = 1;
+    ctx.fillStyle = '#333333';
+    ctx.font = 'bold 60px sans-serif';
+    ctx.fillText(`Stroke ${displayStroke}/${totalStrokes}`, canvas.width / 2, canvas.height - 150);
+    return;
   }
 
-  const displayStroke = Math.min(currentStroke + 1, totalStrokes);
+  ctx.save();
+  ctx.globalAlpha = opacity;
+  ctx.fillStyle = '#000000';
+  ctx.font = 'bold 500px serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  const tempCanvas = document.createElement('canvas');
+  tempCanvas.width = canvas.width;
+  tempCanvas.height = canvas.height;
+  const tempCtx = tempCanvas.getContext('2d')!;
+
+  tempCtx.font = 'bold 500px serif';
+  tempCtx.textAlign = 'center';
+  tempCtx.textBaseline = 'middle';
+  tempCtx.fillStyle = '#000000';
+  tempCtx.fillText(kanji, tempCanvas.width / 2, tempCanvas.height / 2);
+
+  const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+  const maskData = createStrokeMask(imageData, strokesToShow, totalStrokes);
+  tempCtx.putImageData(maskData, 0, 0);
+
+  ctx.drawImage(tempCanvas, 0, 0);
+  ctx.restore();
+
+  const displayStroke = Math.min(strokesToShow + 1, totalStrokes);
   ctx.fillStyle = '#333333';
   ctx.font = 'bold 60px sans-serif';
   ctx.fillText(`Stroke ${displayStroke}/${totalStrokes}`, canvas.width / 2, canvas.height - 150);
+}
+
+function createStrokeMask(imageData: ImageData, currentStroke: number, totalStrokes: number): ImageData {
+  const data = imageData.data;
+  const width = imageData.width;
+  const height = imageData.height;
+
+  const result = new ImageData(width, height);
+  const resultData = result.data;
+
+  const regions: {pixels: number[], x: number, y: number}[] = [];
+  const visited = new Uint8Array(width * height);
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = (y * width + x) * 4;
+      if (data[idx + 3] > 128 && !visited[y * width + x]) {
+        const region = floodFill(data, visited, x, y, width, height);
+        if (region.length > 100) {
+          const centerX = region.reduce((sum, p) => sum + (p % width), 0) / region.length;
+          const centerY = region.reduce((sum, p) => sum + Math.floor(p / width), 0) / region.length;
+          regions.push({pixels: region, x: centerX, y: centerY});
+        }
+      }
+    }
+  }
+
+  regions.sort((a, b) => {
+    const diffY = a.y - b.y;
+    if (Math.abs(diffY) > height * 0.1) return diffY;
+    return a.x - b.x;
+  });
+
+  const strokesPerRegion = Math.max(1, Math.floor(totalStrokes / Math.max(1, regions.length)));
+  const regionsToShow = Math.min(Math.ceil((currentStroke + 1) / strokesPerRegion), regions.length);
+
+  for (let i = 0; i < regionsToShow && i < regions.length; i++) {
+    const region = regions[i];
+    for (const pixelIndex of region.pixels) {
+      const srcIdx = pixelIndex * 4;
+      resultData[srcIdx] = data[srcIdx];
+      resultData[srcIdx + 1] = data[srcIdx + 1];
+      resultData[srcIdx + 2] = data[srcIdx + 2];
+      resultData[srcIdx + 3] = data[srcIdx + 3];
+    }
+  }
+
+  return result;
+}
+
+function floodFill(data: Uint8ClampedArray, visited: Uint8Array, startX: number, startY: number, width: number, height: number): number[] {
+  const stack = [{x: startX, y: startY}];
+  const region: number[] = [];
+
+  while (stack.length > 0) {
+    const {x, y} = stack.pop()!;
+
+    if (x < 0 || x >= width || y < 0 || y >= height) continue;
+
+    const pixelIndex = y * width + x;
+    if (visited[pixelIndex]) continue;
+
+    const idx = pixelIndex * 4;
+    if (data[idx + 3] <= 128) continue;
+
+    visited[pixelIndex] = 1;
+    region.push(pixelIndex);
+
+    stack.push({x: x + 1, y});
+    stack.push({x: x - 1, y});
+    stack.push({x, y: y + 1});
+    stack.push({x, y: y - 1});
+  }
+
+  return region;
 }
 
 function drawUsageScene(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, usageExample: { word: string; reading: string; translation: string }, progress: number) {
