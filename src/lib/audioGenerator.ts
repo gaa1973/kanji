@@ -132,9 +132,9 @@ export class AudioGenerator {
         this.copyBufferAtTime(data, this.audioBuffers.stroke, time, sampleRate, channel);
       }
 
-      this.copyBufferAtTime(data, this.audioBuffers.transition, 14, sampleRate, channel);
+      this.copyBufferAtTime(data, this.audioBuffers.conclusion, 6, sampleRate, channel);
 
-      this.copyBufferAtTime(data, this.audioBuffers.conclusion, 17, sampleRate, channel);
+      this.copyBufferAtTime(data, this.audioBuffers.transition, 14, sampleRate, channel);
     }
 
     return buffer;
