@@ -47,28 +47,13 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "={{ $env.SUPABASE_URL }}/storage/v1/object/kanji-videos/={{ $json.filename }}",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendBody": true,
-        "bodyContentType": "raw",
-        "rawBody": "={{ $json.videoBase64 }}",
-        "options": {
-          "bodyContentCustomMimeType": "video/mp4"
-        }
+        "functionCode": "const fetch = require('node-fetch');\nconst fs = require('fs').promises;\n\nconst supabaseUrl = process.env.SUPABASE_URL || 'https://ijkaeprjoaxtxasepama.supabase.co';\nconst supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;\n\nif (!supabaseKey) {\n  throw new Error('SUPABASE_SERVICE_ROLE_KEY environment variable is not set');\n}\n\nconst filename = $json.filename;\nconst videoPath = $json.videoPath;\nconst kanji = $json.kanji;\n\nconsole.log(`Uploading ${filename} to Supabase Storage`);\n\ntry {\n  // Read video file as buffer\n  const videoBuffer = await fs.readFile(videoPath);\n  \n  // Upload to Supabase Storage\n  const uploadUrl = `${supabaseUrl}/storage/v1/object/kanji-videos/${filename}`;\n  \n  const response = await fetch(uploadUrl, {\n    method: 'POST',\n    headers: {\n      'Authorization': `Bearer ${supabaseKey}`,\n      'apikey': supabaseKey,\n      'Content-Type': 'video/mp4',\n      'x-upsert': 'true'\n    },\n    body: videoBuffer\n  });\n\n  if (!response.ok) {\n    const errorText = await response.text();\n    throw new Error(`Upload failed (${response.status}): ${errorText}`);\n  }\n\n  const result = await response.json();\n  console.log(`Successfully uploaded ${filename}`);\n\n  return {\n    kanji: kanji,\n    meaning: $json.meaning,\n    filename: filename,\n    fileSize: $json.fileSize,\n    uploadResult: result,\n    tmpDir: $json.tmpDir\n  };\n} catch (error) {\n  console.error('Upload error:', error);\n  throw new Error(`Failed to upload video: ${error.message}`);\n}"
       },
       "id": "upload-video-node",
       "name": "Upload to Supabase",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.1,
-      "position": [1050, 300],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "supabase-auth",
-          "name": "Supabase Storage Auth"
-        }
-      }
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 300]
     },
     {
       "parameters": {
