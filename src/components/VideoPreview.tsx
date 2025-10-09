@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase, KanjiData } from '../lib/supabase';
 import { Loader2, Download, Play, CheckCircle } from 'lucide-react';
-import { generateKanjiVideoScenes, downloadScenes } from '../lib/videoGenerator';
+import { generateKanjiVideo, downloadVideo } from '../lib/canvasVideoGenerator';
 
 interface VideoPreviewProps {
   selectedKanji: string[];
@@ -72,70 +72,31 @@ export function VideoPreview({ selectedKanji }: VideoPreviewProps) {
     setGeneratedZips([]);
 
     try {
-      const n8nWebhookUrl = import.meta.env.VITE_N8N_WEBHOOK_URL ||
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-kanji-videos`;
+      const totalVideos = kanjiDetails.length;
 
-      const requestData = kanjiDetails.map(k => ({
-        kanji: k.kanji,
-        meaning: k.meaning,
-        category: k.category,
-        difficulty: k.difficulty,
-        totalStrokes: k.total_strokes,
-        usageExample: (Array.isArray(k.usage_examples) && k.usage_examples[0]) || { word: '', reading: '', translation: '' },
-      }));
+      for (let i = 0; i < totalVideos; i++) {
+        const kanji = kanjiDetails[i];
+        setGenerationProgress(Math.round((i / totalVideos) * 90));
 
-      setGenerationProgress(30);
+        const videoData = {
+          kanji: kanji.kanji,
+          meaning: kanji.meaning || '',
+          category: kanji.category,
+          difficulty: kanji.difficulty || 'N5',
+          totalStrokes: kanji.total_strokes || 1,
+          usageExample: (Array.isArray(kanji.usage_examples) && kanji.usage_examples[0]) ||
+            { word: kanji.kanji, reading: '', translation: '' },
+        };
 
-      console.log('Sending request to:', n8nWebhookUrl);
-      console.log('Request data:', requestData);
+        const videoBlob = await generateKanjiVideo(videoData);
+        const filename = `KanjiFlow_${kanji.kanji}_${Date.now()}.webm`;
+        await downloadVideo(videoBlob, filename);
 
-      const response = await fetch(n8nWebhookUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(import.meta.env.VITE_N8N_WEBHOOK_URL ? {} : {
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
-          })
-        },
-        body: JSON.stringify({ kanjiList: requestData }),
-      });
-
-      console.log('Response status:', response.status);
-      console.log('Response ok:', response.ok);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Error response:', errorText);
-        throw new Error(`動画生成リクエストが失敗しました: ${response.status} ${errorText}`);
+        setGeneratedZips(prev => [...prev, { kanji: kanji.kanji, sceneCount: 5 }]);
       }
 
-      const result = await response.json();
       setGenerationProgress(100);
-
-      if (result.success && result.downloadUrl) {
-        const results = requestData.map(k => ({
-          kanji: k.kanji,
-          sceneCount: 5
-        }));
-        setGeneratedZips(results);
-
-        const a = document.createElement('a');
-        a.href = result.downloadUrl;
-        a.download = `KanjiFlow_Weekly_${new Date().toISOString().split('T')[0]}.zip`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-
-        alert(`動画生成が完了しました！\n\nZIPファイルのダウンロードが開始されました。`);
-      } else {
-        const results = requestData.map(k => ({
-          kanji: k.kanji,
-          sceneCount: 5
-        }));
-        setGeneratedZips(results);
-
-        alert(`動画生成リクエストを受け付けました。\n\n処理時間: 15-35分（7動画）\n\nn8nワークフローが必要です。詳細はn8n-workflow-spec.jsonを参照してください。`);
-      }
+      alert(`${totalVideos}個の動画生成が完了しました！`);
     } catch (error) {
       console.error('Error generating videos:', error);
       alert('動画生成中にエラーが発生しました。もう一度お試しください。');
@@ -208,24 +169,12 @@ export function VideoPreview({ selectedKanji }: VideoPreviewProps) {
                   {generatedZips.length}個の漢字動画が処理キューに追加されました。
                 </p>
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                  <p className="text-sm text-blue-800 font-semibold mb-2">処理ステップ（各動画）:</p>
-                  <ol className="text-xs text-blue-700 space-y-1 list-decimal list-inside">
-                    <li>背景画像を生成（Image Generation Tool - 1080x1920 jpg）</li>
-                    <li>書き順シーケンス画像を生成（各画数ごとにPNG）</li>
-                    <li>FFmpegで動画を合成（20秒、BGM・効果音付き）</li>
-                    <li>指定タイミングでテロップを挿入</li>
-                    <li>MP4ファイルとしてエクスポート</li>
-                    <li>全動画をZIPに圧縮</li>
-                    <li>一時ファイルをクリーンアップ</li>
-                  </ol>
-                </div>
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-                  <p className="text-sm text-yellow-800 font-semibold mb-2">必要な要件:</p>
-                  <ul className="text-xs text-yellow-700 space-y-1 list-disc list-inside">
-                    <li>画像生成API（Stable Diffusion / Midjourney / DALL-E）</li>
-                    <li>FFmpeg（動画合成・編集用）</li>
-                    <li>音声ファイル: LoFi_Japanese_Chill.mp3, brush_strike.wav</li>
-                    <li>十分なサーバーストレージと処理能力</li>
+                  <p className="text-sm text-blue-800 font-semibold mb-2">生成方式:</p>
+                  <ul className="text-xs text-blue-700 space-y-1 list-disc list-inside">
+                    <li>ブラウザ上でCanvas APIを使用して生成</li>
+                    <li>外部APIや追加ツール不要</li>
+                    <li>完全無料・即時ダウンロード</li>
+                    <li>WebM形式（VP9コーデック）で出力</li>
                   </ul>
                 </div>
                 <div className="grid grid-cols-3 md:grid-cols-7 gap-2">
@@ -235,7 +184,7 @@ export function VideoPreview({ selectedKanji }: VideoPreviewProps) {
                       className="bg-white border-2 border-green-300 rounded-lg p-2 text-center"
                     >
                       <div className="text-2xl mb-1">{zip.kanji}</div>
-                      <div className="text-xs text-gray-600">キュー済</div>
+                      <div className="text-xs text-gray-600">完了</div>
                     </div>
                   ))}
                 </div>
