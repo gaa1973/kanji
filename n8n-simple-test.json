@@ -1,0 +1,93 @@
+{
+  "name": "KanjiFlow Simple Test",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "kanji-test",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-node",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "kanji-test"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Extract kanji list from webhook\nconst kanjiList = $input.first().json.kanjiList;\n\nif (!kanjiList || !Array.isArray(kanjiList) || kanjiList.length === 0) {\n  throw new Error('kanjiList is required and must be a non-empty array');\n}\n\nconsole.log(`Processing ${kanjiList.length} kanji characters`);\n\nreturn kanjiList.map((k, index) => ({\n  json: {\n    kanji: k.kanji,\n    meaning: k.meaning,\n    category: k.category,\n    difficulty: k.difficulty || 'N5',\n    totalStrokes: k.totalStrokes || 4,\n    usageExample: k.usageExample || { word: '', reading: '', translation: '' },\n    index: index + 1,\n    total: kanjiList.length\n  }\n}));"
+      },
+      "id": "prepare-data-node",
+      "name": "Prepare Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "const { exec } = require('child_process');\nconst util = require('util');\nconst execPromise = util.promisify(exec);\n\nconst kanji = $json.kanji;\nconst meaning = $json.meaning;\n\nconsole.log(`Testing tools for ${kanji}`);\n\n// Test ImageMagick\ntry {\n  const { stdout: convertVersion } = await execPromise('convert -version');\n  console.log('ImageMagick version:', convertVersion.split('\\n')[0]);\n} catch (error) {\n  throw new Error(`ImageMagick not available: ${error.message}`);\n}\n\n// Test FFmpeg\ntry {\n  const { stdout: ffmpegVersion } = await execPromise('ffmpeg -version');\n  console.log('FFmpeg version:', ffmpegVersion.split('\\n')[0]);\n} catch (error) {\n  throw new Error(`FFmpeg not available: ${error.message}`);\n}\n\n// Create simple test image\nconst timestamp = Date.now();\nconst tmpDir = `/tmp/kanji_test_${timestamp}`;\nawait execPromise(`mkdir -p ${tmpDir}`);\n\nconst testImagePath = `${tmpDir}/test_${kanji}.jpg`;\nawait execPromise(`\n  convert -size 1080x1920 xc:white \\\n    -gravity center \\\n    -pointsize 600 -fill black \\\n    -annotate +0+0 \"${kanji}\" \\\n    ${testImagePath}\n`);\n\nconsole.log(`Test image created: ${testImagePath}`);\n\nreturn [{\n  json: {\n    success: true,\n    kanji: kanji,\n    meaning: meaning,\n    testImagePath: testImagePath,\n    tmpDir: tmpDir,\n    timestamp: timestamp,\n    message: `Successfully created test image for ${kanji}`\n  }\n}];"
+      },
+      "id": "test-tools-node",
+      "name": "Test Tools",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "respond-node",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [850, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Data": {
+      "main": [
+        [
+          {
+            "node": "Test Tools",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Tools": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2024-10-02T00:00:00.000Z",
+  "versionId": "1"
+}

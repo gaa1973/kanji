@@ -1,0 +1,44 @@
+{
+  "name": "Simple Kanji Test",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "simple-kanji-test",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-simple",
+      "name": "Webhook Simple",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Simple test: just return the input data\nconst input = $input.all();\nconst webhookData = input[0].json.body;\n\n// Return processed data\nreturn {\n  success: true,\n  kanji: webhookData.kanji,\n  message: 'Test successful!'\n};"
+      },
+      "id": "code-simple",
+      "name": "Simple Process",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Simple": {
+      "main": [
+        [
+          {
+            "node": "Simple Process",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "1"
+}

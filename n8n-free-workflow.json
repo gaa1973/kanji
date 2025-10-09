@@ -17,7 +17,7 @@
     },
     {
       "parameters": {
-        "functionCode": "// Extract kanji list from webhook\nconst kanjiList = $input.first().json.kanjiList;\n\nif (!kanjiList || !Array.isArray(kanjiList) || kanjiList.length === 0) {\n  throw new Error('kanjiList is required and must be a non-empty array');\n}\n\nconsole.log(`Processing ${kanjiList.length} kanji characters`);\n\nreturn kanjiList.map((k, index) => ({\n  json: {\n    kanji: k.kanji,\n    meaning: k.meaning,\n    category: k.category,\n    difficulty: k.difficulty || 'N5',\n    totalStrokes: k.totalStrokes || 4,\n    usageExample: k.usageExample || { word: '', reading: '', translation: '' },\n    index: index + 1,\n    total: kanjiList.length\n  }\n}));"
+        "functionCode": "// Extract kanji list from webhook\nconst kanjiList = $input.first().json.kanjiList;\n\nif (!kanjiList || !Array.isArray(kanjiList) || kanjiList.length === 0) {\n  throw new Error('kanjiList is required and must be a non-empty array');\n}\n\nconsole.log(`Processing ${kanjiList.length} kanji characters`);\n\nreturn kanjiList.map((k, index) => {\n  return {\n    kanji: k.kanji,\n    meaning: k.meaning,\n    category: k.category,\n    difficulty: k.difficulty || 'N5',\n    totalStrokes: k.totalStrokes || 4,\n    usageExample: k.usageExample || { word: '', reading: '', translation: '' },\n    index: index + 1,\n    total: kanjiList.length\n  };\n});"
       },
       "id": "prepare-data-node",
       "name": "Prepare Data",

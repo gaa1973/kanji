@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { supabase, KanjiData } from '../lib/supabase';
 import { Loader2, RefreshCw } from 'lucide-react';
 import { CategoryType } from '../types';
@@ -132,3 +132,5 @@ export function KanjiSuggestions({
     </div>
   );
 }
+
+export default KanjiSuggestions;

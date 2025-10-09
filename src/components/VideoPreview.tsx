@@ -52,9 +52,9 @@ export function VideoPreview({ selectedKanji }: VideoPreviewProps) {
         videoTimeline: {
           opening: '0.0s - 1.0s: "Today\'s Kanji" + "Can you write this?" (黒背景)',
           introduction: `1.0s - 4.0s: "Why this Kanji?" + "Category: ${k.category.toUpperCase()}" (黒背景)`,
-          strokeDemo: `4.0s - 14.0s: 書き順デモ ${k.total_strokes}画 (背景画像 + テロップ "Stroke i/${k.total_strokes}")`,
-          usage: `14.0s - 17.0s: "How to use it?" + ${k.usage_examples[0]?.word || 'Example'} (黒背景)`,
-          conclusion: `17.0s - 20.0s: ${k.kanji} = ${k.meaning} + "Level: ${k.difficulty}" + "Share if you learned!" (黒背景)`
+          strokeDemo: `4.0s - 14.0s: 書き順デモ ${k.total_strokes ?? '?'}画 (背景画像 + テロップ "Stroke i/${k.total_strokes ?? '?'}")`,
+          usage: `14.0s - 17.0s: "How to use it?" + Example (黒背景)`,
+          conclusion: `17.0s - 20.0s: ${k.kanji} = ${k.meaning ?? ''} + "Level: ${k.difficulty ?? ''}" + "Share if you learned!" (黒背景)`
         }
       }));
 
@@ -81,7 +81,7 @@ export function VideoPreview({ selectedKanji }: VideoPreviewProps) {
         category: k.category,
         difficulty: k.difficulty,
         totalStrokes: k.total_strokes,
-        usageExample: k.usage_examples[0] || { word: '', reading: '', translation: '' },
+        usageExample: (Array.isArray(k.usage_examples) && k.usage_examples[0]) || { word: '', reading: '', translation: '' },
       }));
 
       setGenerationProgress(30);
@@ -275,7 +275,9 @@ export function VideoPreview({ selectedKanji }: VideoPreviewProps) {
                       <div className="text-7xl font-bold my-8">{kanji.kanji}</div>
                       <div className="text-2xl">{kanji.meaning}</div>
                       <div className="text-sm opacity-75 mt-4">
-                        {kanji.usage_examples[0]?.word} ({kanji.usage_examples[0]?.reading})
+                        {Array.isArray(kanji.usage_examples) && kanji.usage_examples.length > 0
+                          ? `${kanji.usage_examples[0].word} (${kanji.usage_examples[0].reading})`
+                          : ''}
                       </div>
                       <div className="text-xs opacity-50 mt-2">
                         {kanji.usage_examples[0]?.translation}
