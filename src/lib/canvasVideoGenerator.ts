@@ -17,11 +17,7 @@ export async function generateKanjiVideo(data: KanjiVideoData): Promise<Blob> {
   canvas.height = 1920;
   const ctx = canvas.getContext('2d')!;
 
-  const frames: ImageData[] = [];
   const fps = 30;
-  const totalDuration = 20;
-  const totalFrames = fps * totalDuration;
-
   const sceneDurations = [
     { name: 'opening', duration: 1, frames: fps * 1 },
     { name: 'category', duration: 3, frames: fps * 3 },
@@ -30,7 +26,32 @@ export async function generateKanjiVideo(data: KanjiVideoData): Promise<Blob> {
     { name: 'conclusion', duration: 3, frames: fps * 3 }
   ];
 
-  let currentFrame = 0;
+  const stream = canvas.captureStream(fps);
+  const mediaRecorder = new MediaRecorder(stream, {
+    mimeType: 'video/webm;codecs=vp8',
+    videoBitsPerSecond: 2500000
+  });
+
+  const chunks: Blob[] = [];
+
+  const videoPromise = new Promise<Blob>((resolve, reject) => {
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) {
+        chunks.push(e.data);
+      }
+    };
+
+    mediaRecorder.onstop = () => {
+      const blob = new Blob(chunks, { type: 'video/webm' });
+      resolve(blob);
+    };
+
+    mediaRecorder.onerror = (e) => {
+      reject(e);
+    };
+  });
+
+  mediaRecorder.start();
 
   for (const scene of sceneDurations) {
     for (let i = 0; i < scene.frames; i++) {
@@ -54,12 +75,14 @@ export async function generateKanjiVideo(data: KanjiVideoData): Promise<Blob> {
           break;
       }
 
-      frames.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
-      currentFrame++;
+      await new Promise(resolve => setTimeout(resolve, 1000 / fps));
     }
   }
 
-  return await createWebMVideo(frames, canvas.width, canvas.height, fps);
+  mediaRecorder.stop();
+  stream.getTracks().forEach(track => track.stop());
+
+  return await videoPromise;
 }
 
 function drawOpeningScene(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, progress: number) {
@@ -183,58 +206,6 @@ function drawConclusionScene(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasEl
   ctx.restore();
 }
 
-async function createWebMVideo(frames: ImageData[], width: number, height: number, fps: number): Promise<Blob> {
-  const stream = new MediaStream();
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d')!;
-
-  const canvasStream = canvas.captureStream(fps);
-  canvasStream.getTracks().forEach(track => stream.addTrack(track));
-
-  const mediaRecorder = new MediaRecorder(stream, {
-    mimeType: 'video/webm;codecs=vp9',
-    videoBitsPerSecond: 5000000
-  });
-
-  const chunks: Blob[] = [];
-
-  return new Promise((resolve, reject) => {
-    mediaRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) {
-        chunks.push(e.data);
-      }
-    };
-
-    mediaRecorder.onstop = () => {
-      const blob = new Blob(chunks, { type: 'video/webm' });
-      resolve(blob);
-    };
-
-    mediaRecorder.onerror = (e) => {
-      reject(e);
-    };
-
-    mediaRecorder.start();
-
-    let frameIndex = 0;
-    const frameInterval = 1000 / fps;
-
-    const drawNextFrame = () => {
-      if (frameIndex < frames.length) {
-        ctx.putImageData(frames[frameIndex], 0, 0);
-        frameIndex++;
-        setTimeout(drawNextFrame, frameInterval);
-      } else {
-        mediaRecorder.stop();
-        stream.getTracks().forEach(track => track.stop());
-      }
-    };
-
-    drawNextFrame();
-  });
-}
 
 export async function downloadVideo(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
