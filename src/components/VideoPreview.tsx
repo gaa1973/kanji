@@ -86,6 +86,9 @@ export function VideoPreview({ selectedKanji }: VideoPreviewProps) {
 
       setGenerationProgress(30);
 
+      console.log('Sending request to:', n8nWebhookUrl);
+      console.log('Request data:', requestData);
+
       const response = await fetch(n8nWebhookUrl, {
         method: 'POST',
         headers: {
@@ -97,8 +100,13 @@ export function VideoPreview({ selectedKanji }: VideoPreviewProps) {
         body: JSON.stringify({ kanjiList: requestData }),
       });
 
+      console.log('Response status:', response.status);
+      console.log('Response ok:', response.ok);
+
       if (!response.ok) {
-        throw new Error('動画生成リクエストが失敗しました');
+        const errorText = await response.text();
+        console.error('Error response:', errorText);
+        throw new Error(`動画生成リクエストが失敗しました: ${response.status} ${errorText}`);
       }
 
       const result = await response.json();
