@@ -69,7 +69,6 @@ export function VideoPreview({ selectedKanji }: VideoPreviewProps) {
 
   const handleGenerateSingle = async (index: number) => {
     if (generatedZips.some(z => z.kanji === kanjiDetails[index].kanji)) {
-      alert('この動画は既に生成済みです');
       return;
     }
 
@@ -97,22 +96,12 @@ export function VideoPreview({ selectedKanji }: VideoPreviewProps) {
       const filename = `KanjiFlow_${kanji.kanji}_Day${index + 1}_${Date.now()}.webm`;
       console.log(`Downloading as: ${filename}`);
 
-      try {
-        await downloadVideo(videoBlob, filename);
-        console.log('Download complete');
+      await downloadVideo(videoBlob, filename);
+      console.log(`Download complete: ${filename}`);
 
-        setGeneratedZips(prev => [...prev, { kanji: kanji.kanji, sceneCount: 5 }]);
-
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        alert(`${kanji.kanji}の動画が生成されました！\n\nファイル名: ${filename}\n\nブラウザのダウンロードフォルダを確認してください。\nダウンロードが始まらない場合は、ブラウザのポップアップブロッカーを無効にしてください。`);
-      } catch (downloadError) {
-        console.error('Download failed:', downloadError);
-        alert(`動画は生成されましたが、ダウンロードに失敗しました。\n\nブラウザの設定でダウンロードが許可されているか確認してください。`);
-      }
+      setGeneratedZips(prev => [...prev, { kanji: kanji.kanji, sceneCount: 5 }]);
     } catch (error) {
       console.error('Error generating video:', error);
-      alert('動画生成中にエラーが発生しました。もう一度お試しください。');
     } finally {
       setGenerating(false);
       setCurrentGeneratingIndex(-1);
