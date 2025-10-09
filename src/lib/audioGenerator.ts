@@ -67,18 +67,42 @@ export class AudioGenerator {
     const sampleRate = this.audioContext.sampleRate;
     const buffer = this.audioContext.createBuffer(2, duration * sampleRate, sampleRate);
 
-    const chordFreqs = [523.25, 659.25, 783.99];
+    const melodyNotes = [
+      { freq: 523.25, start: 0.0, length: 0.15 },
+      { freq: 659.25, start: 0.15, length: 0.15 },
+      { freq: 783.99, start: 0.3, length: 0.15 },
+      { freq: 1046.50, start: 0.45, length: 0.4 }
+    ];
+
+    const chordFreqs = [523.25, 659.25, 783.99, 1046.50];
 
     for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
       const data = buffer.getChannelData(channel);
+
+      for (const note of melodyNotes) {
+        for (let i = 0; i < data.length; i++) {
+          const t = i / sampleRate;
+          if (t >= note.start && t < note.start + note.length) {
+            const localT = t - note.start;
+            const envelope = Math.sin((localT / note.length) * Math.PI) *
+                           Math.exp(-localT * 3);
+            data[i] += Math.sin(2 * Math.PI * note.freq * localT) * 0.3 * envelope;
+          }
+        }
+      }
+
       for (let i = 0; i < data.length; i++) {
         const t = i / sampleRate;
-        const envelope = 1 - Math.pow(t / duration, 2);
-        let value = 0;
-        for (const freq of chordFreqs) {
-          value += Math.sin(2 * Math.PI * freq * t);
+        if (t >= 0.9) {
+          const chordT = t - 0.9;
+          const envelope = (1 - Math.pow(chordT / (duration - 0.9), 1.5)) *
+                          Math.exp(-chordT * 0.5);
+          let chordValue = 0;
+          for (const freq of chordFreqs) {
+            chordValue += Math.sin(2 * Math.PI * freq * chordT);
+          }
+          data[i] += (chordValue / chordFreqs.length) * 0.25 * envelope;
         }
-        data[i] = (value / chordFreqs.length) * 0.15 * envelope;
       }
     }
 
