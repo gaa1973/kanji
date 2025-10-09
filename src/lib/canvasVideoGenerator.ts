@@ -1,3 +1,5 @@
+import { AudioGenerator, mergeVideoAndAudio } from './audioGenerator';
+
 interface KanjiVideoData {
   kanji: string;
   meaning: string;
@@ -11,7 +13,7 @@ interface KanjiVideoData {
   };
 }
 
-export async function generateKanjiVideo(data: KanjiVideoData): Promise<Blob> {
+export async function generateKanjiVideo(data: KanjiVideoData, withAudio: boolean = true): Promise<Blob> {
   const canvas = document.createElement('canvas');
   canvas.width = 1080;
   canvas.height = 1920;
@@ -82,7 +84,23 @@ export async function generateKanjiVideo(data: KanjiVideoData): Promise<Blob> {
   mediaRecorder.stop();
   stream.getTracks().forEach(track => track.stop());
 
-  return await videoPromise;
+  const videoBlob = await videoPromise;
+
+  if (!withAudio) {
+    return videoBlob;
+  }
+
+  try {
+    const audioGen = new AudioGenerator();
+    const audioBuffer = await audioGen.createMasterAudioTrack(20, data.totalStrokes);
+    const audioBlob = await audioGen.audioBufferToWav(audioBuffer);
+
+    const finalVideo = await mergeVideoAndAudio(videoBlob, audioBlob);
+    return finalVideo;
+  } catch (error) {
+    console.warn('Audio generation failed, returning video without audio:', error);
+    return videoBlob;
+  }
 }
 
 function drawOpeningScene(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, progress: number) {
@@ -141,21 +159,43 @@ function drawStrokesScene(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasEleme
     );
   }
 
-  const strokeProgress = progress;
-  ctx.globalAlpha = strokeProgress;
+  const currentStroke = Math.floor(progress * totalStrokes);
+  const strokeSegments = totalStrokes;
+  const segmentDuration = 1 / strokeSegments;
+  const currentSegmentProgress = (progress % segmentDuration) / segmentDuration;
 
-  ctx.fillStyle = '#000000';
-  ctx.font = 'bold 500px serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(kanji, canvas.width / 2, canvas.height / 2);
+  const isTransition = currentSegmentProgress < 0.1;
 
-  ctx.globalAlpha = 1;
+  if (!isTransition) {
+    const strokesToShow = currentStroke + 1;
+    const opacity = Math.min(strokesToShow / totalStrokes, 1);
 
-  const currentStroke = Math.floor(progress * totalStrokes) + 1;
+    ctx.globalAlpha = opacity;
+    ctx.fillStyle = '#000000';
+    ctx.font = 'bold 500px serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(kanji, canvas.width / 2, canvas.height / 2);
+    ctx.globalAlpha = 1;
+  } else {
+    const fadeProgress = currentSegmentProgress / 0.1;
+    ctx.globalAlpha = fadeProgress;
+    const strokesToShow = currentStroke + 1;
+    const opacity = Math.min(strokesToShow / totalStrokes, 1);
+
+    ctx.globalAlpha = opacity * fadeProgress;
+    ctx.fillStyle = '#000000';
+    ctx.font = 'bold 500px serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(kanji, canvas.width / 2, canvas.height / 2);
+    ctx.globalAlpha = 1;
+  }
+
+  const displayStroke = Math.min(currentStroke + 1, totalStrokes);
   ctx.fillStyle = '#333333';
   ctx.font = 'bold 60px sans-serif';
-  ctx.fillText(`Stroke ${Math.min(currentStroke, totalStrokes)}/${totalStrokes}`, canvas.width / 2, canvas.height - 150);
+  ctx.fillText(`Stroke ${displayStroke}/${totalStrokes}`, canvas.width / 2, canvas.height - 150);
 }
 
 function drawUsageScene(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, usageExample: { word: string; reading: string; translation: string }, progress: number) {

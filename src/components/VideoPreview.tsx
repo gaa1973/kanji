@@ -24,6 +24,7 @@ export function VideoPreview({ selectedKanji }: VideoPreviewProps) {
   const [generating, setGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState(0);
   const [generatedZips, setGeneratedZips] = useState<{ kanji: string; sceneCount: number }[]>([]);
+  const [enableAudio, setEnableAudio] = useState(true);
 
   useEffect(() => {
     if (selectedKanji.length > 0) {
@@ -88,7 +89,7 @@ export function VideoPreview({ selectedKanji }: VideoPreviewProps) {
             { word: kanji.kanji, reading: '', translation: '' },
         };
 
-        const videoBlob = await generateKanjiVideo(videoData);
+        const videoBlob = await generateKanjiVideo(videoData, enableAudio);
         const filename = `KanjiFlow_${kanji.kanji}_${Date.now()}.webm`;
         await downloadVideo(videoBlob, filename);
 
@@ -123,15 +124,28 @@ export function VideoPreview({ selectedKanji }: VideoPreviewProps) {
         <h3 className="text-lg font-semibold text-gray-800">
           Video Preview ({kanjiDetails.length}/7)
         </h3>
+        <div className="flex items-center gap-4">
 {selectedKanji.length === 7 && !generating && generatedZips.length === 0 && (
-          <button
-            onClick={handleGenerate}
-            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all shadow-md hover:shadow-lg text-lg font-semibold"
-          >
-            <Download size={24} />
-            動画シーンを生成・ダウンロード
-          </button>
-        )}
+            <>
+              <label className="flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-lg cursor-pointer hover:bg-gray-200 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={enableAudio}
+                  onChange={(e) => setEnableAudio(e.target.checked)}
+                  className="w-4 h-4"
+                />
+                <span className="text-sm font-medium text-gray-700">効果音を追加</span>
+              </label>
+              <button
+                onClick={handleGenerate}
+                className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all shadow-md hover:shadow-lg text-lg font-semibold"
+              >
+                <Download size={24} />
+                動画を生成・ダウンロード
+              </button>
+            </>
+          )}
+        </div>
 {generating && (
           <div className="flex items-center gap-3 px-6 py-3 bg-blue-50 border-2 border-blue-300 rounded-lg">
             <Loader2 className="animate-spin text-blue-600" size={24} />
@@ -174,7 +188,8 @@ export function VideoPreview({ selectedKanji }: VideoPreviewProps) {
                     <li>ブラウザ上でCanvas APIを使用して生成</li>
                     <li>外部APIや追加ツール不要</li>
                     <li>完全無料・即時ダウンロード</li>
-                    <li>WebM形式（VP9コーデック）で出力</li>
+                    <li>WebM形式（VP8/Opusコーデック）で出力</li>
+                    <li>効果音: {enableAudio ? '有効' : '無効'}</li>
                   </ul>
                 </div>
                 <div className="grid grid-cols-3 md:grid-cols-7 gap-2">
@@ -257,8 +272,10 @@ export function VideoPreview({ selectedKanji }: VideoPreviewProps) {
                 <div className="space-y-2">
                   <h5 className="font-semibold text-gray-700">オーディオ</h5>
                   <div className="text-sm space-y-1">
-                    <div className="p-2 bg-white rounded">BGM: Lo-fi Japanese Chill</div>
-                    <div className="p-2 bg-white rounded">効果音: 筆の音（各0.1秒）</div>
+                    <div className="p-2 bg-white rounded">オープニング音: 上昇トーン（1秒）</div>
+                    <div className="p-2 bg-white rounded">書き順効果音: 筆音（各{kanji.total_strokes}回）</div>
+                    <div className="p-2 bg-white rounded">トランジション音: スライド音（0.3秒）</div>
+                    <div className="p-2 bg-white rounded">エンディング音: コード（3秒）</div>
                   </div>
                 </div>
               </div>
