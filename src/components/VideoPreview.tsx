@@ -102,7 +102,11 @@ export function VideoPreview({ selectedKanji }: VideoPreviewProps) {
 
         setGeneratedZips(prev => [...prev, { kanji: kanji.kanji, sceneCount: 5 }]);
 
-        await new Promise(resolve => setTimeout(resolve, 500));
+        if (window.gc) {
+          window.gc();
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
 
       setGenerationProgress(100);

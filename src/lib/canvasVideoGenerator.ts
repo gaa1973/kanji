@@ -88,6 +88,9 @@ export async function generateKanjiVideo(data: KanjiVideoData, withAudio: boolea
 
   const videoBlob = await videoPromise;
 
+  canvas.width = 0;
+  canvas.height = 0;
+
   if (!withAudio) {
     return videoBlob;
   }
