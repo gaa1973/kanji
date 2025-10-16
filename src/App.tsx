@@ -28,10 +28,13 @@ function App() {
     if (!selectedCategory) return;
 
     try {
+      console.log('🔍 Fetching kanji from Supabase...', { category: selectedCategory });
       const { data, error } = await supabase
         .from('kanji_library')
         .select('kanji')
         .eq('category', selectedCategory);
+
+      console.log('📦 Supabase response:', { data, error });
 
       if (error) throw error;
 
@@ -39,9 +42,10 @@ function App() {
       const shuffled = [...available].sort(() => Math.random() - 0.5);
       const selected = shuffled.slice(0, 7);
 
+      console.log('✅ Selected kanji:', selected);
       setSelectedKanji(selected);
     } catch (error) {
-      console.error('Error randomizing kanji:', error);
+      console.error('❌ Error randomizing kanji:', error);
     }
   };
 
