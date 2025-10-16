@@ -37,11 +37,13 @@ export function VideoPreview({ selectedKanji }: VideoPreviewProps) {
   const loadKanjiDetails = async () => {
     setLoading(true);
     try {
+      console.log('🔗 Connected to Supabase:', supabase.supabaseUrl);
       const { data, error } = await supabase
         .from('kanji_library')
         .select('*')
         .in('kanji', selectedKanji);
 
+      console.log('📊 Raw data from Supabase:', data);
       if (error) throw error;
 
       const orderedData = selectedKanji
