@@ -235,7 +235,9 @@ export function VideoPreview({ selectedKanji }: VideoPreviewProps) {
                           : ''}
                       </div>
                       <div className="text-xs opacity-50 mt-2">
-                        {kanji.usage_examples[0]?.translation}
+                        {Array.isArray(kanji.usage_examples) && kanji.usage_examples.length > 0
+                          ? kanji.usage_examples[0]?.translation
+                          : ''}
                       </div>
                     </div>
                   </div>
